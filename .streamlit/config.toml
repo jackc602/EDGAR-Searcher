@@ -1,0 +1,7 @@
+# ======================================
+# Global Streamlit Config Options
+# ======================================
+
+[client]
+showSidebarNavigation = false
+

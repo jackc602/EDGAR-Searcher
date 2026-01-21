@@ -1,4 +1,11 @@
 import streamlit as st
+import sys
+import os
+
+# Add the project root to the Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
+
 from backend.edgar_client import get_filings
 from backend.embedding_client import EmbeddingClient
 from backend.llm_client import LLMClient
@@ -31,7 +38,7 @@ if st.button("Load and Embed Filings"):
 
                 # Fetch filings
                 filings = get_filings(ticker, start_date_str, end_date_str)
-                st.session_state.text_data.append(filings)
+                st.session_state.text_data = filings
                 st.success("Filings extraction complete!")
 
                 # Embed filings
