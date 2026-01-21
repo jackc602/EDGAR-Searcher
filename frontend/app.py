@@ -8,7 +8,6 @@ sys.path.insert(0, project_root)
 
 from backend.edgar_client import get_filings
 from backend.embedding_client import EmbeddingClient
-from backend.llm_client import LLMClient
 from frontend.sidebar import load_sidebar
 import logging
 logging.basicConfig(format='%(filename)s:%(lineno)s:%(levelname)s -- %(message)s', level=logging.INFO)
@@ -58,34 +57,17 @@ if "text_data" in st.session_state and st.session_state.text_data:
     st.subheader("Preview of Extracted Filings")
     st.text_area("Extracted Filings", value="\n".join(st.session_state.text_data[:1]), height=200, disabled=True)
 
-
-# 4. Model Selection
-st.subheader("Select LLM Model")
-model_options = ["llama2", "mistral", "codellama"] # Common Ollama models
-selected_model = st.selectbox("Choose a model", model_options)
-st.session_state.selected_model = selected_model
-
-# 5. Interact with the model
-st.subheader("Chat with your SEC Filings Data")
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-if prompt := st.chat_input("Ask a question about the filings"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+# 4. View Retrieved Chunks
+st.subheader("View Retrieved Chunks from Vector Database")
+prompt_for_chunks = st.text_input("Enter a prompt to see retrieved chunks")
+if st.button("Retrieve Chunks"):
+    if prompt_for_chunks:
+        with st.spinner("Retrieving chunks..."):
             try:
-                llm_client = LLMClient(model=st.session_state.selected_model)
-                response = llm_client.ask(prompt, collection_name="sec_filings_embeddings")
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                embedding_client = EmbeddingClient()
+                retrieved_chunks = embedding_client.query(prompt_for_chunks, collection_name="sec_filings_embeddings")
+                st.write(retrieved_chunks)
             except Exception as e:
-                st.error(f"An error occurred while interacting with the LLM: {e}")
+                st.error(f"An error occurred while retrieving chunks: {e}")
+    else:
+        st.warning("Please enter a prompt.")

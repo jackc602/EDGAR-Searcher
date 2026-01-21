@@ -22,7 +22,7 @@ class LLMClient:
             The LLM's response.
         """
         if use_rag:
-            context_documents = self.embedding_client.search(query=question, collection_name=collection_name)
+            context_documents = self.embedding_client.query(query=question, collection_name=collection_name)
             context = "\n".join(context_documents)
             prompt = f"Using the following context, please answer the question.\n\nContext:\n{context}\n\nQuestion: {question}"
         else:
