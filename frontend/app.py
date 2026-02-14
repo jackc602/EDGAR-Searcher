@@ -12,6 +12,12 @@ from backend.document_chunker import chunk_filing
 from frontend.sidebar import load_sidebar
 import logging
 
+
+@st.cache_resource
+def get_embedding_client():
+    """Get a cached singleton EmbeddingClient instance."""
+    return EmbeddingClient()
+
 logging.basicConfig(
     format='%(filename)s:%(lineno)s:%(levelname)s -- %(message)s',
     level=logging.INFO
@@ -69,7 +75,7 @@ if st.button("Load and Embed Filings"):
 
                     st.success(f"Created {len(all_chunks)} chunks from {len(filings)} filings!")
 
-                    # Store in session state
+                    # Store in session state (without raw HTML to save memory)
                     st.session_state.chunks = all_chunks
                     st.session_state.filings_metadata = [
                         {
@@ -77,13 +83,12 @@ if st.button("Load and Embed Filings"):
                             "filing_date": f.filing_date,
                             "filing_type": f.filing_type,
                             "accession_number": f.accession_number,
-                            "content": f.content,
                         }
                         for f in filings
                     ]
 
                     # Embed chunks
-                    embedding_client = EmbeddingClient()
+                    embedding_client = get_embedding_client()
 
                     # Delete existing collection to start fresh
                     try:
@@ -127,7 +132,7 @@ if st.button("Retrieve Chunks"):
     if prompt_for_chunks:
         with st.spinner("Retrieving chunks..."):
             try:
-                embedding_client = EmbeddingClient()
+                embedding_client = get_embedding_client()
                 results = embedding_client.query(
                     prompt_for_chunks,
                     collection_name="sec_filings_embeddings",

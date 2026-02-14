@@ -51,7 +51,8 @@ class EmbeddingClient:
             except Exception as e:
                 logger.info(f"Error adding embedding for chunk {chunk_id}: {e}")
 
-            if progress_callback:
+            # Batch progress updates (every 10 chunks or at the end)
+            if progress_callback and (i % 10 == 0 or i == total - 1):
                 progress_callback(i + 1, total)
 
     def embed_and_store_texts(

@@ -89,7 +89,7 @@ def extract_text_from_html(html_content: str) -> str:
     Returns:
         Clean text with excessive whitespace removed.
     """
-    soup = BeautifulSoup(html_content, 'html.parser')
+    soup = BeautifulSoup(html_content, 'lxml')
 
     # Remove script and style elements
     for element in soup(['script', 'style', 'head', 'meta', 'link']):
