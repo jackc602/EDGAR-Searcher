@@ -1,11 +1,23 @@
 import requests
 import time
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Union, List
 import logging
 logging.basicConfig(format='%(filename)s:%(lineno)s:%(levelname)s -- %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FilingMetadata:
+    """Represents a SEC filing with its content and metadata."""
+    content: str
+    ticker: str
+    cik: str
+    accession_number: str
+    filing_date: str
+    filing_type: str
 
 # --- Configuration ---
 USER_AGENT = "Personal RAG App (carroll.jac@northeastern.edu) Python/3.9"
@@ -68,9 +80,17 @@ def get_filing_document(accession_number: str, primary_document: str, cik: str) 
         logger.info(f"Error fetching document {primary_document} for accession {accession_number}: {e}")
         return None
 
-def get_filings(ticker: str, start_date: str, end_date: str) -> List[str]:
+def get_filings(ticker: str, start_date: str, end_date: str) -> List[FilingMetadata]:
     """
     Fetches all filings for a given ticker and date range.
+
+    Args:
+        ticker: Company ticker symbol (e.g., "AAPL").
+        start_date: Start date in YYYY-MM-DD format.
+        end_date: End date in YYYY-MM-DD format.
+
+    Returns:
+        List of FilingMetadata objects with content and metadata.
     """
     cik = get_cik_from_ticker(ticker)
     logger.info(f"Fetching filings for ticker {ticker} from {start_date} to {end_date}")
@@ -80,7 +100,7 @@ def get_filings(ticker: str, start_date: str, end_date: str) -> List[str]:
         logger.info(f"CIK for ticker {ticker} is {cik}")
 
     submissions = get_company_submissions(cik)
-    
+
     if not submissions:
         logger.info(f"Submissions for CIK {cik} are empty, exiting...")
         return []
@@ -96,6 +116,14 @@ def get_filings(ticker: str, start_date: str, end_date: str) -> List[str]:
             logger.info(f"Processing filing {accession_number} dated {filing_date} type {form_type}")
             document_content = get_filing_document(accession_number, primary_document, cik)
             if document_content:
-                filings.append(document_content)
+                filing_metadata = FilingMetadata(
+                    content=document_content,
+                    ticker=ticker.upper(),
+                    cik=cik,
+                    accession_number=accession_number,
+                    filing_date=filing_date,
+                    filing_type=form_type,
+                )
+                filings.append(filing_metadata)
     logger.info(f"Total filings fetched: {len(filings)}")
     return filings

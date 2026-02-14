@@ -12,14 +12,15 @@ load_sidebar()
 
 st.title("SEC Filings Viewer")
 
-if "text_data" in st.session_state and st.session_state.text_data:
+if "filings_metadata" in st.session_state and st.session_state.filings_metadata:
     # Initialize session state for pagination
     if 'page_number' not in st.session_state:
         st.session_state.page_number = 0
 
     st.subheader("All Extracted Filings")
 
-    total_filings = len(st.session_state.text_data)
+    filings = st.session_state.filings_metadata
+    total_filings = len(filings)
     filings_per_page = 1
 
     # Pagination buttons
@@ -34,14 +35,23 @@ if "text_data" in st.session_state and st.session_state.text_data:
         if st.button("Next"):
             if st.session_state.page_number < total_filings - 1:
                 st.session_state.page_number += 1
-    
+
     with col2:
         st.write(f"Page {st.session_state.page_number + 1} of {total_filings}")
 
-    # Display the filing for the current page
+    # Get current filing
+    current_filing = filings[st.session_state.page_number]
+
+    # Display filing metadata
+    st.markdown(f"**Ticker:** {current_filing['ticker']} | "
+                f"**Type:** {current_filing['filing_type']} | "
+                f"**Date:** {current_filing['filing_date']}")
+    st.markdown(f"**Accession #:** {current_filing['accession_number']}")
+
+    # Display the filing content
     st.text_area(
         f"Filing {st.session_state.page_number + 1}",
-        value=st.session_state.text_data[st.session_state.page_number],
+        value=current_filing.get('content', 'Content not available'),
         height=400,
         disabled=True
     )
