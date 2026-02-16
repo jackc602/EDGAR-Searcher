@@ -193,9 +193,11 @@ if "retrieved_results" in st.session_state and st.session_state.retrieved_result
                 st.divider()
 
                 # Show document text (truncated if too long)
+                # Escape dollar signs to prevent LaTeX rendering
+                display_doc = doc.replace("$", "\\$")
                 max_display_chars = 2000
-                if len(doc) > max_display_chars:
-                    st.markdown(doc[:max_display_chars] + "...")
-                    st.caption(f"(Showing {max_display_chars} of {len(doc)} characters)")
+                if len(display_doc) > max_display_chars:
+                    st.markdown(display_doc[:max_display_chars] + "...")
+                    st.caption(f"(Showing first ~{max_display_chars} of {len(doc)} characters)")
                 else:
-                    st.markdown(doc)
+                    st.markdown(display_doc)
