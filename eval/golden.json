@@ -1,0 +1,20 @@
+[
+  {
+    "question": "What were Apple's principal product categories in fiscal 2023?",
+    "ticker": "AAPL",
+    "expected_item": "1",
+    "expected_year": "2023"
+  },
+  {
+    "question": "What macroeconomic and geopolitical risks does Apple disclose?",
+    "ticker": "AAPL",
+    "expected_item": "1A",
+    "expected_year": "2023"
+  },
+  {
+    "question": "How did Apple's services revenue change year over year in fiscal 2023?",
+    "ticker": "AAPL",
+    "expected_item": "7",
+    "expected_year": "2023"
+  }
+]

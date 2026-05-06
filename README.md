@@ -79,5 +79,7 @@ Then open http://localhost:8501. Note: you'll still need to `docker exec` into t
 ## Notes
 
 - The app only fetches **10-K** and **10-Q** filings. Other form types are filtered out.
-- The default chat model is `gemma3:270m`, a very small model chosen so the app runs on modest hardware. Swap to `mistral` or another pulled model from the Chat page dropdown for higher-quality answers at the cost of more RAM and slower responses.
+- The default chat model is `gemma3:270m`, a very small model chosen so the app runs on modest hardware. Swap to `gemma3:4b` or another pulled model from the Chat page dropdown for higher-quality answers at the cost of more RAM and slower responses.
 - The SEC EDGAR API requires a User-Agent header. The current one lives in `backend/edgar_client.py` — update it to your own contact info before heavy use.
+- Reranker selection is controlled by the `RERANKER_MODE` env var (`crossencoder` | `bm25` | `off`, default `crossencoder`) and overridable per session from the Chat page. The cross-encoder downloads `mixedbread-ai/mxbai-rerank-xsmall-v1` (~70M params) on first use.
+- The Chroma collection used for embeddings is `sec_filings_embeddings_v2`. If you previously ran an earlier version with `sec_filings_embeddings`, that older collection can be removed with `EmbeddingClient().delete_collection("sec_filings_embeddings")` from a Python shell once you've confirmed the new one works.

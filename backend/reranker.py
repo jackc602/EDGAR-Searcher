@@ -1,13 +1,21 @@
 """
-BM25-based keyword reranker for improving RAG retrieval quality.
+Rerankers for improving RAG retrieval quality.
 
-Uses Reciprocal Rank Fusion (RRF) to combine vector similarity rankings
-with keyword-based BM25 rankings for better retrieval results.
+Two implementations live here:
+- Reranker: BM25 + Reciprocal Rank Fusion (pure stdlib, instant startup).
+- CrossEncoderReranker: a small mxbai-rerank-xsmall-v1 cross-encoder via
+  sentence-transformers (much stronger for QA, ~70M params, CPU-friendly).
+
+Both expose `rerank(query, results, n_final) -> dict` with the same shape.
 """
+import functools
+import logging
 import math
 import re
 from collections import Counter
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 class BM25Scorer:
@@ -18,30 +26,28 @@ class BM25Scorer:
     based on the query terms appearing in each document.
     """
 
-    def __init__(self, k1: float = 1.5, b: float = 0.75):
+    def __init__(self, k1: float = 1.5, b: float = 0.75, cache_size: int = 10000):
         """
         Initialize BM25 scorer with tuning parameters.
 
         Args:
             k1: Term frequency saturation parameter (typically 1.2-2.0).
             b: Length normalization parameter (0 = no normalization, 1 = full).
+            cache_size: Max number of tokenized documents to memoize.
         """
         self.k1 = k1
         self.b = b
+        self._cache_size = cache_size
+        self._tok_cache: dict[str, List[str]] = {}
 
     def _tokenize(self, text: str) -> List[str]:
-        """
-        Tokenize text into lowercase words.
-
-        Args:
-            text: Input text to tokenize.
-
-        Returns:
-            List of lowercase word tokens.
-        """
-        # Extract words, convert to lowercase
-        words = re.findall(r'\b[a-zA-Z0-9]+\b', text.lower())
-        return words
+        cached = self._tok_cache.get(text)
+        if cached is not None:
+            return cached
+        tokens = re.findall(r'\b[a-zA-Z0-9]+\b', text.lower())
+        if len(self._tok_cache) < self._cache_size:
+            self._tok_cache[text] = tokens
+        return tokens
 
     def score(self, query: str, documents: List[str]) -> List[float]:
         """
@@ -192,3 +198,48 @@ class Reranker:
         }
 
         return reranked_results
+
+
+DEFAULT_CROSSENCODER_MODEL = "mixedbread-ai/mxbai-rerank-xsmall-v1"
+
+
+@functools.lru_cache(maxsize=2)
+def _load_cross_encoder(model_name: str):
+    """Lazy, cached loader so the model isn't reloaded on Streamlit reruns."""
+    from sentence_transformers import CrossEncoder
+    logger.info(f"Loading cross-encoder model {model_name}")
+    return CrossEncoder(model_name)
+
+
+class CrossEncoderReranker:
+    """
+    Rerank candidates with a small cross-encoder. Strictly stronger than
+    BM25+RRF for grounded QA at the cost of a one-time model download.
+    """
+
+    def __init__(self, model_name: str = DEFAULT_CROSSENCODER_MODEL):
+        self.model_name = model_name
+
+    def rerank(
+        self,
+        query: str,
+        results: Dict[str, Any],
+        n_final: int = 5,
+    ) -> Dict[str, Any]:
+        documents = results.get("documents", [])
+        metadatas = results.get("metadatas", [])
+        distances = results.get("distances", [])
+
+        if not documents:
+            return results
+
+        model = _load_cross_encoder(self.model_name)
+        pairs = [(query, doc) for doc in documents]
+        scores = model.predict(pairs)
+
+        ranked = sorted(range(len(documents)), key=lambda i: scores[i], reverse=True)[:n_final]
+        return {
+            "documents": [documents[i] for i in ranked],
+            "metadatas": [metadatas[i] for i in ranked],
+            "distances": [distances[i] for i in ranked],
+        }

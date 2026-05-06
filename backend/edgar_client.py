@@ -1,11 +1,9 @@
 import requests
 import time
-import json
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Union, List
 import logging
-logging.basicConfig(format='%(filename)s:%(lineno)s:%(levelname)s -- %(message)s', level=logging.INFO)
+from dataclasses import dataclass
+from typing import Union, List
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,7 +42,7 @@ def get_cik_from_ticker(ticker: str) -> Union[str, None]:
         logger.info(f"CIK not found for ticker: {ticker}")
         return None
     except requests.exceptions.RequestException as e:
-        logger.info(f"Error fetching ticker-CIK map: {e}")
+        logger.exception(f"Error fetching ticker-CIK map: {e}")
         return None
 
 def get_company_submissions(cik: str) -> Union[dict, None]:
@@ -60,7 +58,7 @@ def get_company_submissions(cik: str) -> Union[dict, None]:
         logger.info(f"Successfully fetched submissions for CIK: {cik}")
         return response.json()
     except requests.exceptions.RequestException as e:
-        logger.info(f"Error fetching submissions for CIK {cik}: {e}")
+        logger.exception(f"Error fetching submissions for CIK {cik}: {e}")
         return None
 
 def get_filing_document(accession_number: str, primary_document: str, cik: str) -> Union[str, None]:
@@ -77,7 +75,7 @@ def get_filing_document(accession_number: str, primary_document: str, cik: str) 
         logger.info(f"Successfully fetched document: {primary_document}")
         return response.text
     except requests.exceptions.RequestException as e:
-        logger.info(f"Error fetching document {primary_document} for accession {accession_number}: {e}")
+        logger.exception(f"Error fetching document {primary_document} for accession {accession_number}: {e}")
         return None
 
 def get_filings(ticker: str, start_date: str, end_date: str) -> List[FilingMetadata]:

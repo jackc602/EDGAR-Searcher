@@ -9,10 +9,6 @@ from dataclasses import dataclass
 from typing import Optional, List, Tuple
 from bs4 import BeautifulSoup
 
-logging.basicConfig(
-    format='%(filename)s:%(lineno)s:%(levelname)s -- %(message)s',
-    level=logging.INFO
-)
 logger = logging.getLogger(__name__)
 
 # Regex pattern to identify Item boundaries in SEC filings
@@ -109,70 +105,98 @@ def identify_item_sections(text: str) -> List[Tuple[int, str, str]]:
     """
     Identify Item section boundaries in the text.
 
-    Args:
-        text: Clean text from SEC filing.
-
-    Returns:
-        List of tuples (start_position, item_number, item_name).
+    SEC filings reference each item at least twice — once in the table of
+    contents and once as the actual section header. We pick the second
+    occurrence so the section captures real content rather than the TOC.
     """
-    sections = []
-    seen_items = set()
-
+    positions_by_item: dict[str, List[int]] = {}
     for match in ITEM_PATTERN.finditer(text):
         item_number = match.group(2).upper()
-        # Normalize item number (e.g., "1a" -> "1A")
-        item_number = item_number.upper()
+        positions_by_item.setdefault(item_number, []).append(match.start())
 
-        # Skip if we've already seen this item (avoid duplicates from TOC)
-        if item_number in seen_items:
-            continue
-        seen_items.add(item_number)
-
+    sections = []
+    for item_number, positions in positions_by_item.items():
+        start = positions[1] if len(positions) > 1 else positions[0]
         item_name = ITEM_NAMES.get(item_number, "Unknown Section")
-        sections.append((match.start(), item_number, item_name))
+        sections.append((start, item_number, item_name))
 
-    # Sort by position
     sections.sort(key=lambda x: x[0])
     return sections
 
 
+# Sentence boundary: period/!/? followed by whitespace, then a capital letter
+# or digit. Good enough for SEC English prose without pulling in nltk.
+_SENTENCE_BOUNDARY = re.compile(r'(?<=[.!?])\s+(?=[A-Z0-9])')
+
+
+def _split_sentences(text: str) -> List[str]:
+    sentences = [s.strip() for s in _SENTENCE_BOUNDARY.split(text) if s.strip()]
+    return sentences
+
+
 def split_text_into_chunks(
     text: str,
-    chunk_size: int = 1000,
-    overlap: int = 100
+    target_chars: int = 1100,
+    overlap_sentences: int = 1,
 ) -> List[Tuple[str, int]]:
     """
-    Split text into word-based chunks with overlap.
+    Pack sentences into chunks up to a target character budget.
 
-    Args:
-        text: Text to split.
-        chunk_size: Target number of words per chunk.
-        overlap: Number of overlapping words between chunks.
-
-    Returns:
-        List of tuples (chunk_text, chunk_index).
+    target_chars ≈ 1100 ≈ ~275 tokens, comfortably under the 512-token cap of
+    mxbai-embed-large. overlap_sentences carries a tail of full sentences from
+    one chunk into the start of the next so semantic context is preserved at
+    boundaries.
     """
-    words = text.split()
-    if not words:
+    sentences = _split_sentences(text)
+    if not sentences:
         return []
 
-    chunks = []
+    chunks: List[Tuple[str, int]] = []
     chunk_index = 0
-    start = 0
+    buffer: List[str] = []
+    buffer_len = 0
 
-    while start < len(words):
-        end = min(start + chunk_size, len(words))
-        chunk_words = words[start:end]
-        chunk_text = ' '.join(chunk_words)
-        chunks.append((chunk_text, chunk_index))
-        chunk_index += 1
+    for sentence in sentences:
+        # If a single sentence overflows the budget, hard-wrap it on whitespace
+        # to avoid producing one giant chunk that the embedder will truncate.
+        if len(sentence) > target_chars:
+            if buffer:
+                chunks.append((' '.join(buffer), chunk_index))
+                chunk_index += 1
+                buffer = []
+                buffer_len = 0
+            words = sentence.split()
+            piece: List[str] = []
+            piece_len = 0
+            for word in words:
+                added = len(word) + (1 if piece else 0)
+                if piece_len + added > target_chars:
+                    chunks.append((' '.join(piece), chunk_index))
+                    chunk_index += 1
+                    piece = [word]
+                    piece_len = len(word)
+                else:
+                    piece.append(word)
+                    piece_len += added
+            if piece:
+                buffer = piece
+                buffer_len = piece_len
+            continue
 
-        # Move start forward, accounting for overlap
-        start = end - overlap if end < len(words) else len(words)
+        added = len(sentence) + (1 if buffer else 0)
+        if buffer_len + added > target_chars and buffer:
+            chunks.append((' '.join(buffer), chunk_index))
+            chunk_index += 1
+            tail = buffer[-overlap_sentences:] if overlap_sentences > 0 else []
+            buffer = list(tail)
+            buffer_len = sum(len(s) for s in buffer) + max(0, len(buffer) - 1)
+            added = len(sentence) + (1 if buffer else 0)
 
-        # Prevent infinite loop if overlap >= chunk_size
-        if start <= chunks[-1][1] * (chunk_size - overlap) and end < len(words):
-            start = end
+        buffer.append(sentence)
+        buffer_len += added
+
+    if buffer:
+        chunks.append((' '.join(buffer), chunk_index))
 
     return chunks
 
@@ -184,8 +208,8 @@ def chunk_filing(
     accession_number: str,
     filing_date: str,
     filing_type: str,
-    chunk_size: int = 1000,
-    overlap: int = 100
+    target_chars: int = 1100,
+    overlap_sentences: int = 1,
 ) -> List[DocumentChunk]:
     """
     Parse and chunk a SEC filing into DocumentChunks with metadata.
@@ -197,8 +221,8 @@ def chunk_filing(
         accession_number: SEC accession number.
         filing_date: Date of the filing (YYYY-MM-DD).
         filing_type: Type of filing (10-K, 10-Q).
-        chunk_size: Target words per chunk.
-        overlap: Overlapping words between chunks.
+        target_chars: Approximate character budget per chunk (~275 tokens at 1100).
+        overlap_sentences: Number of trailing sentences carried into the next chunk.
 
     Returns:
         List of DocumentChunk objects.
@@ -220,7 +244,7 @@ def chunk_filing(
 
     if not sections:
         # No sections found, chunk the entire document
-        text_chunks = split_text_into_chunks(text, chunk_size, overlap)
+        text_chunks = split_text_into_chunks(text, target_chars, overlap_sentences)
         for chunk_text, _ in text_chunks:
             chunk = DocumentChunk(
                 text=chunk_text,
@@ -249,7 +273,7 @@ def chunk_filing(
                 continue
 
             # Chunk this section
-            text_chunks = split_text_into_chunks(section_text, chunk_size, overlap)
+            text_chunks = split_text_into_chunks(section_text, target_chars, overlap_sentences)
             for chunk_text, _ in text_chunks:
                 chunk = DocumentChunk(
                     text=chunk_text,

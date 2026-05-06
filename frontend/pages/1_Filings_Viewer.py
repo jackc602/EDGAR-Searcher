@@ -1,19 +1,25 @@
-import streamlit as st
 import sys
-import os
+import logging
+from pathlib import Path
 
-# Add the project root to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, project_root)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import streamlit as st
 
 from frontend.sidebar import load_sidebar
+
+
+logging.basicConfig(
+    format='%(filename)s:%(lineno)s:%(levelname)s -- %(message)s',
+    level=logging.INFO,
+)
+
 
 load_sidebar()
 
 st.title("SEC Filings Viewer")
 
 if "filings_metadata" in st.session_state and st.session_state.filings_metadata:
-    # Initialize session state for pagination
     if 'page_number' not in st.session_state:
         st.session_state.page_number = 0
 
@@ -21,9 +27,7 @@ if "filings_metadata" in st.session_state and st.session_state.filings_metadata:
 
     filings = st.session_state.filings_metadata
     total_filings = len(filings)
-    filings_per_page = 1
 
-    # Pagination buttons
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col1:
@@ -39,21 +43,20 @@ if "filings_metadata" in st.session_state and st.session_state.filings_metadata:
     with col2:
         st.write(f"Page {st.session_state.page_number + 1} of {total_filings}")
 
-    # Get current filing
     current_filing = filings[st.session_state.page_number]
 
-    # Display filing metadata
-    st.markdown(f"**Ticker:** {current_filing['ticker']} | "
-                f"**Type:** {current_filing['filing_type']} | "
-                f"**Date:** {current_filing['filing_date']}")
+    st.markdown(
+        f"**Ticker:** {current_filing['ticker']} | "
+        f"**Type:** {current_filing['filing_type']} | "
+        f"**Date:** {current_filing['filing_date']}"
+    )
     st.markdown(f"**Accession #:** {current_filing['accession_number']}")
 
-    # Display the filing content
     st.text_area(
         f"Filing {st.session_state.page_number + 1}",
         value=current_filing.get('content', 'Content not available'),
         height=400,
-        disabled=True
+        disabled=True,
     )
 else:
     st.warning("No filings loaded. Please load filings on the main page.")
