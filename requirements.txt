@@ -5,7 +5,3 @@ beautifulsoup4
 lxml
 requests
 sentence-transformers
-
-# Test runner for eval/tests. The grader itself (eval/grading.py) is pure
-# stdlib and adds no runtime dependency.
-pytest
